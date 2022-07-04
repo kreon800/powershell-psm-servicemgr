@@ -1,14 +1,3 @@
-Param
-(
-    [Parameter(Mandatory = $false)]
-    [ValidateSet("Start-Server", "Stop-Server", "Start-Service", "Stop-Service", "Install")]
-    [string] $action,
-    [Parameter(Mandatory = $false)]
-    [AllowNull()]
-    [AllowEmptyString()]
-    [string] $serviceName
-)
-
 $errorPrefix = "ERROR: "
 $prefix = "Service '{0}' "
 $ERROR_SERVICE_REQUEST_TIMEOUT = $errorPrefix + $prefix + "request timeout"
@@ -78,7 +67,7 @@ function Invoke-ShaiyaServices {
     }
 }
 
-function Require-ShaiyaServerAgents {
+function Test-ShaiyaServerAgents {
     $agents = (Get-Service -DisplayName "Shaiya Agent *")
     try {
         foreach ($agent in $agents) {
@@ -92,29 +81,42 @@ function Require-ShaiyaServerAgents {
 }
 
 function Start-ShaiyaServer {
-    Require-ShaiyaServerAgents
+    Test-ShaiyaServerAgents
     $status = [ServiceProcess.ServiceControllerStatus]::Running
     Invoke-ShaiyaServices $status
 }
 
 function Stop-ShaiyaServer {
-    Require-ShaiyaServerAgents
+    Test-ShaiyaServerAgents
     $status = [ServiceProcess.ServiceControllerStatus]::Stopped
     Invoke-ShaiyaServices $status
 }
 
 function Start-ShaiyaService {
+    [CmdletBinding()]
     Param
     (
         [Parameter(Mandatory = $true)]
         [string] $name
     )
-    Require-ShaiyaServerAgents
+    Test-ShaiyaServerAgents
     $status = [ServiceProcess.ServiceControllerStatus]::Running
     Invoke-ShaiyaService -name $name -status $status
 }
 
-function install {
+function Stop-ShaiyaService {
+    [CmdletBinding()]
+    Param
+    (
+        [Parameter(Mandatory = $true)]
+        [string] $name
+    )
+    Test-ShaiyaServerAgents
+    $status = [ServiceProcess.ServiceControllerStatus]::Stopped
+    Invoke-ShaiyaService -name $name -status $status
+}
+
+function Install-PSM_ServiceMgr {
     if ($PSCommandPath -eq $null) { 
         function GetPSCommandPath() { 
             return $MyInvocation.PSCommandPath;
@@ -131,9 +133,11 @@ function install {
     $startupTrigger = New-ScheduledTaskTrigger -AtStartup
     $user = "NT AUTHORITY\SYSTEM"
     $taskAction = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $destination Start-Server"
-    Write-Host "Installing scheduled task for system startup ..."
+    Write-Host "Installing task for system startup ..."
     Register-ScheduledTask -TaskName "Start Shaiya Server" -Trigger $startupTrigger -User $user -Action $taskAction -RunLevel Highest –Force | Out-Null
+    Write-Host ""
 
+    Write-Host "Installing task for system shutdown ..."
     $key = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\Scripts\Shutdown\0"
     New-Item -Path $key -Force | Out-Null
     New-ItemProperty -Path $key -Name GPO-ID -Value LocalGPO -Force | Out-Null
@@ -149,20 +153,8 @@ function install {
     New-ItemProperty -Path $key -Name "Parameters" -Value "Stop-Server" -Force | Out-Null
     New-ItemProperty -Path $key -Name "IsPowershell" -Value 1 -PropertyType "DWord" -Force | Out-Null
     New-ItemProperty -Path $key -Name "ExecTime" -Value 0 -PropertyType "QWord" -Force | Out-Null
-}
+    Write-Host ""
 
-if ( $action.ToLower() -eq "install" ) {
-    install
-}
-elseif ( $action.ToLower() -eq "start-server" ) {
-    Start-ShaiyaServer
-}
-elseif ( $action.ToLower() -eq "stop-server" ) {
-    Stop-ShaiyaServer
-}
-elseif ( $action.ToLower() -eq "start-service" ) {
-    Start-ShaiyaService $serviceName
-}
-elseif ( $action.ToLower() -eq "stop-service" ) {
-    Stop-ShaiyaService $serviceName
+    Write-Host "Installing functions as shortcut ..."
+    Import-Module $destination -Force
 }
