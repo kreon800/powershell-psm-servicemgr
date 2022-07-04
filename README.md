@@ -10,6 +10,9 @@ PS ...\Downloads> . .\PSM_ServiceMgr.ps1 ; Install-PSM_ServiceMgr
 ```
 4. Enjoy starting/stopping the Shaiya server automatically as a service.
 
+# Requirements
+The [Shaiya services](#allowed-service-names) need to be installed on the system already.
+
 # Features
 ### The whole server complex
 - `Start-ShaiyaServer`
